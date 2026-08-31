@@ -34,7 +34,7 @@
 ### 克隆仓库与安装依赖
 ```bash
 # 克隆仓库
-git clone https://github.com/your-username/FreePEP.git
+git clone https://github.com/siknet/FreePEP.git
 cd FreePEP
 
 # 安装 Python 依赖
