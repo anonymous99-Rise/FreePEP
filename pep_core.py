@@ -12,6 +12,7 @@ import sys
 import re
 import time
 import json
+import math
 import random
 import shutil
 import base64
@@ -284,7 +285,11 @@ class PepDownloader:
 
     def _solve_slider(self, page, log_cb: Optional[Callable[[str], None]] = None) -> bool:
         """检测并破解阿里云 WAF 滑块"""
-        time.sleep(1)
+        try:
+            page.wait_for_selector(".btn_slide", timeout=3000)
+        except Exception:
+            pass
+
         slider = page.query_selector(".btn_slide")
         if not slider:
             return True
@@ -302,21 +307,26 @@ class PepDownloader:
 
         start_x = box["x"] + box["width"] / 2
         start_y = box["y"] + box["height"] / 2
-        target_x = scale_box["x"] + scale_box["width"] + 20
+        distance = scale_box["width"] - box["width"] + 5
+        target_x = start_x + distance
 
         page.mouse.move(start_x, start_y)
+        time.sleep(random.uniform(0.15, 0.3))
         page.mouse.down()
+        time.sleep(0.1)
 
-        curr_x = start_x
-        while curr_x < target_x:
-            curr_x += random.randint(12, 28)
-            curr_y = start_y + random.randint(-2, 2)
+        steps = random.randint(35, 45)
+        for i in range(1, steps + 1):
+            t = i / steps
+            progress = 1 - (1 - t) * (1 - t)
+            curr_x = start_x + distance * progress + random.uniform(-1, 1)
+            curr_y = start_y + math.sin(t * math.pi) * 2 + random.uniform(-1, 1)
             page.mouse.move(curr_x, curr_y)
             time.sleep(random.uniform(0.01, 0.025))
 
-        page.mouse.move(target_x, start_y)
+        time.sleep(0.1)
         page.mouse.up()
-        time.sleep(3)
+        time.sleep(2.5)
 
         success = page.query_selector(".btn_slide") is None
         res_msg = "[+] 滑块验证通过！" if success else "[-] 滑块验证未通过。"
@@ -358,17 +368,18 @@ class PepDownloader:
             )
             context.add_init_script("""
                 Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-                window.navigator.chrome = { runtime: {} };
+                window.chrome = { runtime: {} };
             """)
             page = context.new_page()
 
             # 打开阅读器，必须带 Referer 防盗链
             page.goto(book_url, referer="https://jc.pep.com.cn/", wait_until="networkidle")
+            time.sleep(1.5)
 
             # 处理可能的滑块验证
-            if page.query_selector(".btn_slide"):
+            if "Page Verification" in page.title() or page.query_selector(".btn_slide"):
                 self._solve_slider(page, log_cb)
-                time.sleep(2)
+                time.sleep(3)
 
             # 等待阅读器配置完全加载
             for _ in range(15):
@@ -468,15 +479,16 @@ class PepDownloader:
                     if log_cb: log_cb(warn_msg)
                     else: print(warn_msg)
                     page.goto(book_url, referer="https://jc.pep.com.cn/", wait_until="networkidle")
+                    time.sleep(1.5)
                     self._solve_slider(page, log_cb)
-                    time.sleep(2)
+                    time.sleep(3)
 
                 if not download_success:
                     fail_msg = f"  -> [{page_num}/{total_pages}] 下载失败！"
                     if log_cb: log_cb(fail_msg)
                     else: print(fail_msg)
 
-                time.sleep(random.uniform(0.15, 0.3))
+                time.sleep(random.uniform(0.35, 0.65))
 
             browser.close()
 
