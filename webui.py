@@ -646,7 +646,13 @@ def index_page():
 
 
 def main():
-    port = 8000
+    import socket
+    def is_port_in_use(p):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            return s.connect_ex(('127.0.0.1', p)) == 0
+
+    default_port = 8000 if not is_port_in_use(8000) else 8080
+    port = int(os.environ.get("PORT", default_port))
     url = f"http://127.0.0.1:{port}"
     print("=" * 65)
     print("      🚀 人教社电子教材 WebUI 服务器正在启动...")
