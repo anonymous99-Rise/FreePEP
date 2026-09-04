@@ -109,6 +109,36 @@ def sort_nj_key(nj: str) -> Tuple[int, int, str]:
     return (1, 0, nj)
 
 
+def map_book_xd(b: dict) -> str:
+    """根据教材元数据中的 xd 与 xdtype 精确解析标准化学段"""
+    xd = b.get("xd", "").strip()
+    xdtype = b.get("xdtype", "").strip()
+
+    if "盲文" in xdtype:
+        return "盲校（盲文版）"
+    if "低视力" in xdtype:
+        return "盲校（低视力版）"
+    if "聋校" in xdtype:
+        return "聋校"
+    if "培智" in xdtype:
+        return "培智学校"
+    if "六三" in xdtype:
+        if xd == "初中":
+            return "初中（六三学制）"
+        return "小学（六三学制）"
+    if "五四" in xdtype:
+        if xd == "初中":
+            return "初中（五·四学制）"
+        return "小学（五四学制）"
+    if xd == "高中":
+        return "高中"
+    if xd == "小学":
+        return "小学（六三学制）"
+    if xd == "初中":
+        return "初中（六三学制）"
+    return normalize_xd(xd)
+
+
 class PepCatalog:
     """人教社教材目录管理器"""
     BASE_URL = "https://jc.pep.com.cn/"
@@ -124,9 +154,8 @@ class PepCatalog:
                 with open(cls.LOCAL_CACHE, "r", encoding="utf-8") as f:
                     data = json.load(f)
                     if isinstance(data, list) and len(data) > 0:
-                        # 确保每条记录都包含标准化的学段
                         for b in data:
-                            b["xd"] = normalize_xd(b.get("xd", ""))
+                            b["xd"] = map_book_xd(b)
                         return data
             except Exception:
                 pass
@@ -136,23 +165,22 @@ class PepCatalog:
             "Referer": cls.BASE_URL
         }
 
-        # 1. 下载首页定位 chunk-bfbdf2c4 JS
+        # 1. 下载首页定位 chunk-bfbdf2c4 JS (支持兼容压缩无引号属性)
         req = urllib.request.Request(cls.BASE_URL, headers=headers)
         with urllib.request.urlopen(req) as resp:
             html = resp.read().decode("utf-8", errors="ignore")
 
-        chunk_match = re.search(r'src="(/js/chunk-bfbdf2c4\.[a-f0-9]+\.js)"', html)
-        if not chunk_match:
-            chunk_match = re.search(r'href="(/js/chunk-bfbdf2c4\.[a-f0-9]+\.js)"', html)
-
-        chunk_path = chunk_match.group(1) if chunk_match else "/js/chunk-bfbdf2c4.3782cce3.js"
+        chunk_match = re.search(r'(/js/chunk-bfbdf2c4\.[a-f0-9]+\.js)', html)
+        chunk_path = chunk_match.group(1) if chunk_match else "/js/chunk-bfbdf2c4.b4dfb5d3.js"
         chunk_url = urllib.parse.urljoin(cls.BASE_URL, chunk_path)
 
         # 2. 获取 JS 内容并提取十六进制密文
         js_req = urllib.request.Request(chunk_url, headers=headers)
         raw_js = urllib.request.urlopen(js_req).read()
 
-        m = re.search(rb'var\s+o,\s*c\s*=\s*"([A-F0-9]+)"', raw_js)
+        m = re.search(rb'c\s*=\s*"([A-F0-9]+)"', raw_js)
+        if not m:
+            m = re.search(rb'var\s+o,\s*c\s*=\s*"([A-F0-9]+)"', raw_js)
         if not m:
             raise ValueError("未能从前端 JS 中匹配到教材数据密文！")
 
@@ -170,9 +198,9 @@ class PepCatalog:
         data_json = json.loads(plaintext.decode("utf-8"))
         items = data_json.get("data", [])
 
-        # 标准化学段名称
+        # 精确标准化学段名称
         for b in items:
-            b["xd"] = normalize_xd(b.get("xd", ""))
+            b["xd"] = map_book_xd(b)
 
         # 缓存到本地
         with open(cls.LOCAL_CACHE, "w", encoding="utf-8") as f:
@@ -284,49 +312,70 @@ class PepDownloader:
         os.makedirs(self.output_dir, exist_ok=True)
 
     def _solve_slider(self, page, log_cb: Optional[Callable[[str], None]] = None) -> bool:
-        """检测并破解阿里云 WAF 滑块"""
-        try:
-            page.wait_for_selector(".btn_slide", timeout=3000)
-        except Exception:
-            pass
+        """检测并高可靠破解阿里云 WAF 滑块（支持自动重试与防伪装刷新）"""
+        for check_i in range(3):
+            try:
+                page.wait_for_selector(".btn_slide", timeout=2500)
+            except Exception:
+                pass
 
-        slider = page.query_selector(".btn_slide")
-        if not slider:
-            return True
+            slider = page.query_selector(".btn_slide")
+            if not slider:
+                # 若无滑块，直接返回通过
+                return True
 
-        msg = "[*] 检测到阿里云 WAF 滑块验证码，正在自动滑动破解..."
-        if log_cb: log_cb(msg)
-        else: print(msg)
+            msg = f"[*] 检测到阿里云 WAF 滑块验证码 (第 {check_i + 1} 次尝试)，正在自动滑动破解..."
+            if log_cb: log_cb(msg)
+            else: print(msg)
 
-        box = slider.bounding_box()
-        scale = page.query_selector(".nc_scale")
-        scale_box = scale.bounding_box() if scale else None
+            box = slider.bounding_box()
+            scale = page.query_selector(".nc_scale")
+            scale_box = scale.bounding_box() if scale else None
 
-        if not (box and scale_box):
-            return False
+            if not (box and scale_box):
+                time.sleep(1)
+                continue
 
-        start_x = box["x"] + box["width"] / 2
-        start_y = box["y"] + box["height"] / 2
-        distance = scale_box["width"] - box["width"] + 5
-        target_x = start_x + distance
+            start_x = box["x"] + box["width"] / 2
+            start_y = box["y"] + box["height"] / 2
+            distance = scale_box["width"] - box["width"] + 5
 
-        page.mouse.move(start_x, start_y)
-        time.sleep(random.uniform(0.15, 0.3))
-        page.mouse.down()
-        time.sleep(0.1)
+            page.mouse.move(start_x, start_y)
+            time.sleep(random.uniform(0.15, 0.25))
+            page.mouse.down()
+            time.sleep(0.05)
 
-        steps = random.randint(35, 45)
-        for i in range(1, steps + 1):
-            t = i / steps
-            progress = 1 - (1 - t) * (1 - t)
-            curr_x = start_x + distance * progress + random.uniform(-1, 1)
-            curr_y = start_y + math.sin(t * math.pi) * 2 + random.uniform(-1, 1)
-            page.mouse.move(curr_x, curr_y)
-            time.sleep(random.uniform(0.01, 0.025))
+            # 模拟高拟真人手轨迹：带初段加速与末端微晃动
+            steps = random.randint(28, 38)
+            for i in range(1, steps + 1):
+                t = i / steps
+                # 缓动函数
+                progress = math.sin(t * (math.pi / 2))
+                curr_x = start_x + distance * progress + random.uniform(-0.8, 0.8)
+                curr_y = start_y + random.uniform(-1.2, 1.2)
+                page.mouse.move(curr_x, curr_y)
+                time.sleep(random.uniform(0.012, 0.022))
 
-        time.sleep(0.1)
-        page.mouse.up()
-        time.sleep(2.5)
+            # 确保推到最右侧
+            page.mouse.move(start_x + distance + random.randint(2, 6), start_y)
+            time.sleep(0.08)
+            page.mouse.up()
+            time.sleep(2.5)
+
+            if page.query_selector(".btn_slide") is None:
+                res_msg = "[+] 滑块验证通过！"
+                if log_cb: log_cb(res_msg)
+                else: print(res_msg)
+                return True
+            else:
+                # 若滑块仍在，检查是否有“点击刷新”按钮
+                reload_btn = page.query_selector(".nc_iconfont.btn_refresh, .errloading a, .nc-lang-cnt a")
+                if reload_btn:
+                    try:
+                        reload_btn.click()
+                        time.sleep(2)
+                    except Exception:
+                        pass
 
         success = page.query_selector(".btn_slide") is None
         res_msg = "[+] 滑块验证通过！" if success else "[-] 滑块验证未通过。"
@@ -337,16 +386,38 @@ class PepDownloader:
     def download_book(self,
                       book_id: str,
                       custom_title: Optional[str] = None,
+                      sub_dir: Optional[str] = None,
                       progress_cb: Optional[Callable[[int, int, str], None]] = None,
-                      log_cb: Optional[Callable[[str], None]] = None) -> Optional[str]:
+                      log_cb: Optional[Callable[[str], None]] = None,
+                      skip_if_exists: bool = True,
+                      clean_temp: bool = True,
+                      quiet: bool = False) -> Optional[str]:
         """
         下载单本教材
         :param book_id: 教材 ID（如 1284001101241）
         :param custom_title: 自定义书名
+        :param sub_dir: 子目录（如 "小学（六三学制）/一年级"），实现层级分类保存
         :param progress_cb: 进度回调 (current_page, total_pages, status_text)
         :param log_cb: 日志回调 (log_text)
+        :param skip_if_exists: 若本地已存在完整 PDF 则自动跳过
+        :param clean_temp: 合成 PDF 后自动删除该书的切片图片以节约磁盘空间
+        :param quiet: 静默模式，不打印各页下载过程，仅在关键节点或报错时提示
         :return: 生成的 PDF 绝对路径
         """
+        target_dir = os.path.join(self.output_dir, sub_dir) if sub_dir else self.output_dir
+        os.makedirs(target_dir, exist_ok=True)
+
+        # 检查是否已存在完整 PDF（断点续传/跳过机制）
+        if custom_title and skip_if_exists:
+            safe_title = re.sub(r'[\/:*?"<>|]', '_', custom_title).strip()
+            target_pdf = os.path.join(target_dir, f"{safe_title}.pdf")
+            if os.path.exists(target_pdf) and os.path.getsize(target_pdf) > 50000:
+                skip_msg = f"[✔] 本地已存在 《{safe_title}》 ({os.path.getsize(target_pdf) // 1024} KB)，自动跳过。"
+                if log_cb: log_cb(skip_msg)
+                else: print(skip_msg)
+                if progress_cb: progress_cb(1, 1, "本地已存在，跳过")
+                return target_pdf
+
         book_url = f"https://book.pep.com.cn/{book_id}/"
         init_msg = f"[*] 准备加载教材: {book_url}"
         if log_cb: log_cb(init_msg)
@@ -411,6 +482,15 @@ class PepDownloader:
             safe_title = re.sub(r'[\/:*?"<>|]', '_', final_title).strip()
             total_pages = config_info.get("total", 0)
 
+            # 再次检查目标 PDF 是否存在
+            target_pdf = os.path.join(target_dir, f"{safe_title}.pdf")
+            if skip_if_exists and os.path.exists(target_pdf) and os.path.getsize(target_pdf) > 50000:
+                skip_msg = f"[✔] 本地已存在 《{safe_title}》 ({os.path.getsize(target_pdf) // 1024} KB)，自动跳过。"
+                if log_cb: log_cb(skip_msg)
+                else: print(skip_msg)
+                browser.close()
+                return target_pdf
+
             if total_pages == 0:
                 err = f"[-] 无法读取教材总页数 (URL: {page.url})"
                 if log_cb: log_cb(err)
@@ -418,11 +498,12 @@ class PepDownloader:
                 browser.close()
                 return None
 
-            info_msg = f"[+] 教材: 《{safe_title}》 | 总页数: {total_pages} 页"
-            if log_cb: log_cb(info_msg)
-            else: print(info_msg)
+            if not quiet:
+                info_msg = f"[+] 教材: 《{safe_title}》 | 总页数: {total_pages} 页"
+                if log_cb: log_cb(info_msg)
+                else: print(info_msg)
 
-            temp_dir = os.path.join(".", "temp_pages", book_id)
+            temp_dir = os.path.join(get_base_dir(), "temp_pages", book_id)
             os.makedirs(temp_dir, exist_ok=True)
             image_files = []
 
@@ -439,7 +520,7 @@ class PepDownloader:
                             continue
 
                 download_success = False
-                for retry in range(3):
+                for retry in range(4):
                     res = page.evaluate("""async (url) => {
                         try {
                             const resp = await fetch(url);
@@ -467,38 +548,45 @@ class PepDownloader:
                                 f.write(raw_data)
                             image_files.append(img_path)
                             size_kb = len(raw_data) // 1024
-                            log_text = f"  -> [{page_num}/{total_pages}] 下载成功 ({size_kb} KB)"
-                            if log_cb: log_cb(log_text)
-                            else: print(log_text)
+                            if not quiet:
+                                log_text = f"  -> [{page_num}/{total_pages}] 下载成功 ({size_kb} KB)"
+                                if log_cb: log_cb(log_text)
+                                else: print(log_text)
                             if progress_cb: progress_cb(page_num, total_pages, f"正在下载: 第 {page_num}/{total_pages} 页")
                             download_success = True
                             break
 
-                    # 触发 WAF 验证码拦截
-                    warn_msg = f"  [!] 第 {page_num} 页触发验证码，自动刷新破解..."
+                    # 触发 WAF 验证码或网络抖动拦截
+                    warn_msg = f"  [!] 《{safe_title}》第 {page_num} 页触发验证码/拦截 (重试 {retry + 1}/4)，自动重新过盾..."
                     if log_cb: log_cb(warn_msg)
                     else: print(warn_msg)
-                    page.goto(book_url, referer="https://jc.pep.com.cn/", wait_until="networkidle")
-                    time.sleep(1.5)
-                    self._solve_slider(page, log_cb)
-                    time.sleep(3)
+
+                    # 重新刷新/导航并破解滑块
+                    try:
+                        page.goto(book_url, referer="https://jc.pep.com.cn/", wait_until="load")
+                        time.sleep(2)
+                        self._solve_slider(page, log_cb)
+                        time.sleep(2.5)
+                    except Exception:
+                        time.sleep(3)
 
                 if not download_success:
-                    fail_msg = f"  -> [{page_num}/{total_pages}] 下载失败！"
+                    fail_msg = f"  -> 《{safe_title}》[{page_num}/{total_pages}] 下载失败！"
                     if log_cb: log_cb(fail_msg)
                     else: print(fail_msg)
 
-                time.sleep(random.uniform(0.35, 0.65))
+                time.sleep(random.uniform(0.15, 0.35))
 
             browser.close()
 
             if not image_files:
                 return None
 
-            output_pdf = os.path.join(self.output_dir, f"{safe_title}.pdf")
-            merge_msg = f"[*] 正在合成 PDF: {os.path.basename(output_pdf)} ..."
-            if log_cb: log_cb(merge_msg)
-            else: print(merge_msg)
+            output_pdf = target_pdf
+            if not quiet:
+                merge_msg = f"[*] 正在合成 PDF: {os.path.basename(output_pdf)} ..."
+                if log_cb: log_cb(merge_msg)
+                else: print(merge_msg)
             if progress_cb: progress_cb(total_pages, total_pages, "正在合成 PDF 文件...")
 
             pil_images = []
@@ -517,6 +605,13 @@ class PepDownloader:
             first_im = pil_images[0]
             rest_images = pil_images[1:]
             first_im.save(output_pdf, "PDF", resolution=100.0, save_all=True, append_images=rest_images)
+
+            # 下载合成完毕后，自动清理单页图片切片，释放磁盘空间
+            if clean_temp and os.path.exists(temp_dir):
+                try:
+                    shutil.rmtree(temp_dir)
+                except Exception:
+                    pass
 
             done_msg = f"[✔] PDF 生成成功: {output_pdf}"
             if log_cb: log_cb(done_msg)

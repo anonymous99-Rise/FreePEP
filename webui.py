@@ -17,7 +17,7 @@ from fastapi import FastAPI, BackgroundTasks, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from pep_core import PepCatalog, PepDownloader, XD_ORDER, XK_ORDER_PREFIX, NJ_ORDER, get_base_dir
+from pep_core import PepCatalog, PepDownloader, XD_ORDER, XK_ORDER_PREFIX, NJ_ORDER, get_base_dir, normalize_xd
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -104,13 +104,22 @@ class TaskManager:
                 self.log(txt)
 
             try:
+                xd = normalize_xd(book_to_download.get("xd", "其他学段"))
+                nj = book_to_download.get("nj", "通用").strip() or "通用"
+                safe_xd = re.sub(r'[\/:*?"<>|]', '_', xd).strip()
+                safe_nj = re.sub(r'[\/:*?"<>|]', '_', nj).strip()
+                sub_dir = os.path.join(safe_xd, safe_nj)
+
                 self.log(f"==================================================")
-                self.log(f"[*] 开始下载教材: 《{book_to_download.get('title')}》")
+                self.log(f"[*] 开始下载教材: [{safe_xd}/{safe_nj}] 《{book_to_download.get('title')}》")
                 downloader.download_book(
                     book_id=book_to_download["id"],
                     custom_title=book_to_download.get("title"),
+                    sub_dir=sub_dir,
                     progress_cb=progress_callback,
-                    log_cb=log_callback
+                    log_cb=log_callback,
+                    skip_if_exists=True,
+                    clean_temp=True
                 )
             except Exception as e:
                 self.log(f"[-] 下载异常: {e}")
