@@ -67,12 +67,13 @@ jobs:
         if: matrix.target == 'windows'
         run: python build_exe.py
 
-      - name: Build Linux / macOS
-        if: matrix.target != 'windows'
-        run: |
-          pip install pyinstaller
-          playwright install --with-deps chromium
-          python build_exe.py
+      - name: Build Linux
+        if: matrix.target == 'linux'
+        run: python build_linux.py
+
+      - name: Build macOS
+        if: matrix.target == 'macos'
+        run: python build_macos.py
 
       - name: Package Linux / macOS
         if: matrix.target != 'windows'

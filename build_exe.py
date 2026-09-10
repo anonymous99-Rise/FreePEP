@@ -81,7 +81,6 @@ def build_package():
     # 2. 拷贝 Playwright Chromium 绿色便携浏览器到目标目录
     print("\n[2/3] 正在打包绿色便携版 Chromium 浏览器内核...")
     pw_src = find_playwright_browsers_dir()
-    target_browsers_dir = os.path.join(out_app_dir, "_internal", "browsers")
     target_browsers_dir2 = os.path.join(out_app_dir, "browsers")
 
     if pw_src:
