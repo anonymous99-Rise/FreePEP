@@ -1,0 +1,15 @@
+services:
+  webui:
+    build: .
+    container_name: freepep
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./downloads:/app/downloads
+      - ./pep_catalog.json:/app/pep_catalog.json
+      - ./browsers:/app/browsers
+      - ./temp_pages:/app/temp_pages
+    environment:
+      - PORT=8000
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
