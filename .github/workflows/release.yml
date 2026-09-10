@@ -114,10 +114,8 @@ jobs:
       - name: Extract tag version
         id: version
         run: |
-          TAG="${GITHUB_REF#refs/tags/}"
-          if [ -z "$TAG" ] || [ "$TAG" == "$GITHUB_REF" ]; then
-            TAG="${{ github.event.inputs.version }}"
-          fi
+          # github.ref_name is the clean tag name without refs/tags/ prefix
+          TAG="${{ github.event.inputs.version || github.ref_name }}"
           echo "version=$TAG" >> $GITHUB_OUTPUT
 
       - name: Extract changelog for this version
@@ -155,6 +153,6 @@ jobs:
           draft: false
           prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') }}
           files: |
-            artifacts/FreePEP-Windows-x64/FreePEP-Windows-x64.zip
-            artifacts/FreePEP-Linux-x64/FreePEP-Linux-x64.tar.gz
-            artifacts/FreePEP-macOS-x64/FreePEP-macOS-x64.tar.gz
+            artifacts/FreePEP-Windows-x64/dist/FreePEP-Windows-x64.zip
+            artifacts/FreePEP-Linux-x64/dist/FreePEP-Linux-x64.tar.gz
+            artifacts/FreePEP-macOS-x64/dist/FreePEP-macOS-x64.tar.gz
