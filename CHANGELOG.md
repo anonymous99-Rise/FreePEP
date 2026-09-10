@@ -6,6 +6,21 @@
 
 ---
 
+## v2026-09-11
+
+### 课本更新
+- 新增 2026 年秋季学期教材
+- 更新教材封面及元数据
+
+### 代码更新
+- feat: 新增 Docker Compose 部署方案 + WebUI 镜像
+- feat: 新增 GitHub Actions 多平台自动构建（Windows/macOS/Linux）
+- feat: 新增跨平台独立打包脚本（build_linux.py / build_macos.py）
+- fix: 修复 webui.py 缺失 `import re` 问题
+- chore: 使用阿里云镜像加速 Docker 构建
+
+---
+
 ## v2026-09-10
 
 ### 课本更新
