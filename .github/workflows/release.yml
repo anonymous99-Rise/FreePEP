@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: '版本号 (如 v1.2.0)'
+        description: '版本号 (如 v2026-09-10)'
         required: true
         type: string
 
@@ -48,7 +48,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pip-
 
-      - name: Install Linux deps
+      - name: Install deps (Linux)
         if: matrix.target == 'linux'
         run: |
           sudo apt-get update
@@ -58,13 +58,6 @@ jobs:
             libasound2 libpango-1.0-0 libcairo2 libnss3
 
       - name: Install Python deps
-        run: |
-          pip install --no-cache-dir -r requirements.txt
-          pip install pyinstaller playwright
-          playwright install --with-deps chromium
-
-      - name: Build Python deps (alibaba mirror)
-        if: matrix.target == 'linux'
         run: |
           pip install --no-cache-dir -i https://mirrors.aliyun.com/pypi/simple/ -r requirements.txt
           pip install --no-cache-dir -i https://mirrors.aliyun.com/pypi/simple/ pyinstaller playwright
@@ -81,27 +74,20 @@ jobs:
           playwright install --with-deps chromium
           python build_exe.py
 
-      - name: Find built artifacts
-        id: find_artifact
-        shell: bash
-        run: |
-          if [ "${{ matrix.target }}" == "windows" ]; then
-            echo "path=dist/FreePEP-Windows-x64.zip" >> $GITHUB_OUTPUT
-            echo "dir=dist/FreePEP" >> $GITHUB_OUTPUT
-          elif [ "${{ matrix.target }}" == "linux" ]; then
-            echo "path=dist/FreePEP-Linux-x64.tar.gz" >> $GITHUB_OUTPUT
-            echo "dir=dist/FreePEP" >> $GITHUB_OUTPUT
-          else
-            echo "path=dist/FreePEP-macOS-x64.tar.gz" >> $GITHUB_OUTPUT
-            echo "dir=dist/FreePEP" >> $GITHUB_OUTPUT
-          fi
-
       - name: Package Linux / macOS
         if: matrix.target != 'windows'
         shell: bash
         run: |
           mkdir -p dist
-          tar -czf dist/FreePEP-${{ matrix.target == 'macos' && 'macOS' || matrix.target }}-x64.tar.gz -C dist FreePEP
+          PLATFORM_NAME=${{ matrix.target == 'macos' && 'macOS' || matrix.target }}
+          tar -czf dist/FreePEP-${PLATFORM_NAME}-x64.tar.gz -C dist FreePEP
+
+      - name: Find built artifacts
+        id: find_artifact
+        shell: bash
+        run: |
+          PLATFORM_NAME=${{ matrix.target == 'macos' && 'macOS' || matrix.target }}
+          echo "path=dist/FreePEP-${PLATFORM_NAME}-x64.${{ matrix.target == 'windows' && 'zip' || 'tar.gz' }}" >> $GITHUB_OUTPUT
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -124,30 +110,49 @@ jobs:
         with:
           path: artifacts
 
-      - name: Determine version
+      - name: Extract tag version
         id: version
-        shell: bash
         run: |
-          TAG=${GITHUB_REF#refs/tags/}
+          TAG="${GITHUB_REF#refs/tags/}"
           if [ -z "$TAG" ] || [ "$TAG" == "$GITHUB_REF" ]; then
             TAG="${{ github.event.inputs.version }}"
           fi
           echo "version=$TAG" >> $GITHUB_OUTPUT
-          echo "tag_exists=true" >> $GITHUB_OUTPUT
 
-      - name: Create/Update GitHub Release
-        if: steps.version.outputs.tag_exists == 'false'
+      - name: Extract changelog for this version
+        id: changelog
         run: |
-          echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          TAG="v${{ steps.version.outputs.version }}"
+          if grep -q "## $TAG" CHANGELOG.md; then
+            # Extract section until next ## or end of file
+            sed -n "/## $TAG/,/^## /p" CHANGELOG.md | sed '$d' | sed '1d' > release_notes.md
+          else
+            echo "*(无详细更新日志)*" > release_notes.md
+          fi
+
+      - name: Read release notes
+        id: release_notes
+        run: |
+          NOTES=$(cat release_notes.md)
+          echo "body<<EOF" >> $GITHUB_OUTPUT
+          echo "## 更新内容" >> $GITHUB_OUTPUT
+          echo "" >> $GITHUB_OUTPUT
+          cat release_notes.md >> $GITHUB_OUTPUT
+          echo "" >> $GITHUB_OUTPUT
+          echo "---" >> $GITHUB_OUTPUT
+          echo "**课本更新时间：${{ steps.version.outputs.version }}**" >> $GITHUB_OUTPUT
+          echo "" >> $GITHUB_OUTPUT
+          echo "完整更新日志请查看 [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md)" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
-          name: FreePEP ${{ github.ref_name }}
+          tag_name: v${{ steps.version.outputs.version }}
+          name: FreePEP v${{ steps.version.outputs.version }}
+          body: ${{ steps.release_notes.outputs.body }}
           draft: false
           prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') }}
-          generate_release_notes: true
           files: |
             artifacts/FreePEP-Windows-x64/FreePEP-Windows-x64.zip
             artifacts/FreePEP-Linux-x64/FreePEP-Linux-x64.tar.gz

@@ -1,13 +1,18 @@
 # FreePEP 📚 人教社中小学电子教材批量下载器
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Release](https://img.shields.io/github/v/release/anonymous99-Rise/FreePEP)](https://github.com/anonymous99-Rise/FreePEP/releases)
+[![Build](https://img.shields.io/github/actions/workflow/status/anonymous99-Rise/FreePEP/release.yml)](https://github.com/anonymous99-Rise/FreePEP/actions)
 
 **FreePEP** 是一款专为[人民教育出版社中小学电子教材平台](https://jc.pep.com.cn/)开发的自动化教材解析、批量抓取与高清 PDF 合成工具。
 
-提供**WebUI 界面**与**交互式命令行**，内置全量 780+ 本教材目录（数据截止到2026年08月31日）自动解密引擎与阿里云 WAF 滑块验证码自动破解机制，支持一键下载指定学段、学科、年级的全套教材并自动生成高清 PDF 文件。
+提供**WebUI 界面**与**交互式命令行**，内置全量 780+ 本教材目录自动解密引擎与阿里云 WAF 滑块验证码自动破解机制，支持一键下载指定学段、学科、年级的全套教材并自动生成高清 PDF 文件。
 
-# 课本更新时间：2026年9月10日
+**当前版本：v2026-09-10** | **课本更新时间：2026年9月10日** | **[更新日志](CHANGELOG.md)**
 
-# **[文字版 课本下载列表](txtlist.md)	[图片版课本下载列表](piclist.md)**
+---
+
+# **[文字版 课本下载列表](txtlist.md)  [图片版课本下载列表](piclist.md)**
 
 
 ---
