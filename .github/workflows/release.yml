@@ -114,30 +114,24 @@ jobs:
       - name: Extract tag version
         id: version
         run: |
-          # github.ref_name = v2026-09-11, strip leading v
+          # github.ref_name = v2026-09-11, strip leading v for version output
           FULL="${{ github.event.inputs.version || github.ref_name }}"
-          TAG="${FULL#v}"
-          echo "version=$TAG" >> $GITHUB_OUTPUT
+          echo "version=${FULL#v}" >> $GITHUB_OUTPUT
+          echo "full=$FULL" >> $GITHUB_OUTPUT
 
       - name: Extract changelog for this version
-        id: changelog
         run: |
-          VER="${{ steps.version.outputs.version }}"
-          if grep -q "## $VER" CHANGELOG.md; then
-            # Extract section until next ## or end of file
-            sed -n "/## $VER/,/^## /p" CHANGELOG.md | sed '$d' | sed '1d' > release_notes.md
+          # Use full tag name (with v) to match CHANGELOG heading
+          FULL="${{ steps.version.outputs.full }}"
+          if grep -q "## $FULL" CHANGELOG.md; then
+            sed -n "/## $FULL/,/^## /p" CHANGELOG.md | sed '$d' | sed '1d' > release_notes.md
           else
             echo "*(无详细更新日志)*" > release_notes.md
           fi
 
-      - name: Debug artifact structure
-        run: |
-          find artifacts -type f | sort
-
       - name: Read release notes
         id: release_notes
         run: |
-          NOTES=$(cat release_notes.md)
           echo "body<<EOF" >> $GITHUB_OUTPUT
           echo "## 更新内容" >> $GITHUB_OUTPUT
           echo "" >> $GITHUB_OUTPUT
@@ -152,12 +146,12 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.version.outputs.version }}
-          name: FreePEP ${{ steps.version.outputs.version }}
+          tag_name: ${{ steps.version.outputs.full }}
+          name: FreePEP ${{ steps.version.outputs.full }}
           body: ${{ steps.release_notes.outputs.body }}
           draft: false
           prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') }}
           files: |
-            artifacts/FreePEP-Windows-x64/dist/FreePEP-Windows-x64.zip
-            artifacts/FreePEP-Linux-x64/dist/FreePEP-Linux-x64.tar.gz
-            artifacts/FreePEP-macOS-x64/dist/FreePEP-macOS-x64.tar.gz
+            artifacts/FreePEP-Windows-x64/FreePEP-Windows-x64.zip
+            artifacts/FreePEP-Linux-x64/FreePEP-Linux-x64.tar.gz
+            artifacts/FreePEP-macOS-x64/FreePEP-macOS-x64.tar.gz
