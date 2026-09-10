@@ -15,7 +15,7 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
 PLATFORM = "macos"
-OUT_NAME = f"FreePEP-{PLATFORM.title()}-x64"
+OUT_NAME = "FreePEP-macOS-x64"
 
 
 def check_and_install_pyinstaller():

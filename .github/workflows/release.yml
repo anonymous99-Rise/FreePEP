@@ -153,5 +153,5 @@ jobs:
           prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') }}
           files: |
             artifacts/FreePEP-Windows-x64/FreePEP-Windows-x64.zip
-            artifacts/FreePEP-Linux-x64/FreePEP-Linux-x64.tar.gz
+            artifacts/FreePEP-Linux-x64/FreePEP-linux-x64.tar.gz
             artifacts/FreePEP-macOS-x64/FreePEP-macOS-x64.tar.gz
