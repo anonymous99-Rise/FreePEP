@@ -556,19 +556,21 @@ class PepDownloader:
                             download_success = True
                             break
 
-                    # 触发 WAF 验证码或网络抖动拦截
-                    warn_msg = f"  [!] 《{safe_title}》第 {page_num} 页触发验证码/拦截 (重试 {retry + 1}/4)，自动重新过盾..."
+                    # 触发 WAF 验证码、CDN 频控或网络抖动
+                    retry_wait = 2.5 * (retry + 1) + random.uniform(0.5, 1.5)
+                    warn_msg = f"  [!] 《{safe_title}》第 {page_num} 页触发验证码/拦截 (重试 {retry + 1}/4，等待 {retry_wait:.1f}s 后重新过盾)..."
                     if log_cb: log_cb(warn_msg)
                     else: print(warn_msg)
 
-                    # 重新刷新/导航并破解滑块
+                    # 错峰退避与重新过盾
+                    time.sleep(retry_wait)
                     try:
-                        page.goto(book_url, referer="https://jc.pep.com.cn/", wait_until="load")
-                        time.sleep(2)
+                        page.goto(book_url, referer="https://jc.pep.com.cn/", wait_until="load", timeout=20000)
+                        time.sleep(1.5)
                         self._solve_slider(page, log_cb)
-                        time.sleep(2.5)
+                        time.sleep(1.5)
                     except Exception:
-                        time.sleep(3)
+                        time.sleep(2)
 
                 if not download_success:
                     fail_msg = f"  -> 《{safe_title}》[{page_num}/{total_pages}] 下载失败！"
