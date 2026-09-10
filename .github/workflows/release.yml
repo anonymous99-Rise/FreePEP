@@ -80,14 +80,14 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist
-          PLATFORM_NAME=${{ matrix.target == 'macos' && 'macOS' || matrix.target }}
+          PLATFORM_NAME=${{ matrix.target == 'macos' && 'macOS' || (matrix.target == 'windows' && 'Windows') || matrix.target }}
           tar -czf dist/FreePEP-${PLATFORM_NAME}-x64.tar.gz -C dist FreePEP
 
       - name: Find built artifacts
         id: find_artifact
         shell: bash
         run: |
-          PLATFORM_NAME=${{ matrix.target == 'macos' && 'macOS' || matrix.target }}
+          PLATFORM_NAME=${{ matrix.target == 'macos' && 'macOS' || (matrix.target == 'windows' && 'Windows') || matrix.target }}
           echo "path=dist/FreePEP-${PLATFORM_NAME}-x64.${{ matrix.target == 'windows' && 'zip' || 'tar.gz' }}" >> $GITHUB_OUTPUT
 
       - name: Upload artifact
